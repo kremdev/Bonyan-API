@@ -8,7 +8,8 @@
 [![Docker](https://img.shields.io/badge/-Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 [![Tests](https://img.shields.io/badge/tests-69%20passing-brightgreen)](#testing)
-[![docs](https://img.shields.io/badge/docs-bonyanoss-007bff)](https://docs.bonyanoss.org/etha3a)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539)](./openapi.yaml)
+[![docs](https://img.shields.io/badge/docs-bonyanoss-007bff)](https://docs.bonyanoss.org)
 [![website](https://img.shields.io/badge/website-bonyanoss-007bff)](https://bonyanoss.org)
 
 <br />
@@ -26,7 +27,7 @@ _Please select your preferred language below / الرجاء اختيار لغت�
 
 ### Description
 
-**Etha3a-API** is an enterprise-grade, high-performance API built with **Node.js**, **Fastify**, and **TypeScript**. It exposes a unified, type-safe data interface for every kind of Islamic digital content a modern web, mobile, or desktop application might need: full Quran text, audio recitations, Tafsir, Azkar (supplications), Hadith, prayer times, Hijri/Gregorian date conversion, and Qibla direction.
+**Bonyan-API** is an enterprise-grade, high-performance API built with **Node.js**, **Fastify**, and **TypeScript**. It exposes a unified, type-safe data interface for every kind of Islamic digital content a modern web, mobile, or desktop application might need: full Quran text, audio recitations, Tafsir, Azkar (supplications), Hadith, prayer times, Hijri/Gregorian date conversion, and Qibla direction.
 
 Every module is engineered around a single core idea: **resilience through fallback**. If a primary upstream source goes down, the API transparently retries against the next configured provider, returning a consistent shape to the client. Frequently-fetched data is memoized in-process to keep latency low and reduce load on third-party services.
 
@@ -36,6 +37,7 @@ Every module is engineered around a single core idea: **resilience through fallb
 - **In-process caching** — results are memoized with per-endpoint TTLs and concurrent calls are coalesced into a single upstream request.
 - **Request timeouts** — every upstream call is wrapped in `AbortController` so a slow source can't hang your server.
 - **Rate limiting** — built-in per-IP rate limit (configurable via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW`).
+- **Production probes** — `/health`, `/ready`, and `/metrics` for uptime checks and monitoring.
 - **Type-safe** — written in strict TypeScript with `noUncheckedIndexedAccess` enabled.
 - **Modular architecture** — each domain (`ayat`, `surah`, `reciters`, `azkar`, `tafsir`, `hadith`, `prayer`, `hijri`, `qibla`) lives in its own `route.ts` / `controller.ts` / `service.ts` triplet.
 - **Container-ready** — multi-stage `DOCKERFILE` produces a minimal `node:20-alpine` runtime image.
@@ -43,7 +45,7 @@ Every module is engineered around a single core idea: **resilience through fallb
 
 ### Modules & Endpoints
 
-The root `GET /` returns a JSON catalogue of every registered route. `GET /health` returns liveness info.
+The root `GET /` returns a JSON catalogue of every registered route. `GET /health` returns liveness info, `GET /ready` returns readiness and cache stats, and `GET /metrics` exposes Prometheus text metrics.
 
 #### Quran — Surah index — `/surah`
 
@@ -118,7 +120,7 @@ The root `GET /` returns a JSON catalogue of every registered route. `GET /healt
 | GET    | `/prayer/times?city=Mecca&country=SA`                               | Today's timings by city/country    |
 | GET    | `/prayer/times?date=06-05-2026&latitude=...&longitude=...&method=4` | Custom date and calculation method |
 
-**Fallback sources:** `api.aladhan.com/timings` → `api.aladhan.com/timingsByCity` → `api.pray.zone`
+**Fallback sources:** `api.aladhan.com/timings` → `api.aladhan.com/timingsByCity` → `api.pray.zone` (same-day coordinate requests only)
 
 #### Hijri ↔ Gregorian — `/hijri`
 
@@ -158,8 +160,8 @@ The root `GET /` returns a JSON catalogue of every registered route. `GET /healt
 #### Local development
 
 ```bash
-git clone https://github.com/BonyanOSS/Etha3a-API.git
-cd Etha3a-API
+git clone https://github.com/BonyanOSS/Bonyan-API.git
+cd Bonyan-API
 pnpm install
 cp .env.example .env       # adjust PORT / RATE_LIMIT_* if needed
 pnpm dev                   # starts Fastify with hot-reload via tsx watch
@@ -170,26 +172,31 @@ The server prints all registered routes on startup. Open `http://localhost:3000/
 #### Production build
 
 ```bash
-pnpm lint                  # eslint --fix + prettier
+pnpm lint:check            # validates eslint + prettier
+pnpm lint                  # applies eslint + prettier fixes
 pnpm build                 # tsc → dist/
 pnpm start                 # node dist/server.js
 ```
 
 #### Environment variables
 
-| Variable            | Default      | Purpose                                                  |
-| ------------------- | ------------ | -------------------------------------------------------- |
-| `PORT`              | `3000`       | HTTP listen port                                         |
-| `HOST`              | `0.0.0.0`    | Bind address                                             |
-| `NODE_ENV`          | `production` | Logging / framework behavior                             |
-| `RATE_LIMIT_MAX`    | `120`        | Max requests per window per IP                           |
-| `RATE_LIMIT_WINDOW` | `1 minute`   | Rate-limit time window (parsed by `@fastify/rate-limit`) |
+| Variable            | Default      | Purpose                                                    |
+| ------------------- | ------------ | ---------------------------------------------------------- |
+| `PORT`              | `3000`       | HTTP listen port                                           |
+| `HOST`              | `0.0.0.0`    | Bind address                                               |
+| `NODE_ENV`          | `production` | Runtime environment                                        |
+| `RATE_LIMIT_MAX`    | `120`        | Max requests per window per IP                             |
+| `RATE_LIMIT_WINDOW` | `1 minute`   | Rate-limit time window (parsed by `@fastify/rate-limit`)   |
+| `CORS_ORIGIN`       | `*`          | Allowed origins. Use comma-separated origins in production |
+| `TRUST_PROXY`       | `false`      | Trust proxy headers for correct client IPs behind a proxy  |
+| `LOG_LEVEL`         | `info`       | Fastify logger level                                       |
+| `CACHE_MAX_ENTRIES` | `1000`       | Maximum in-process cache entries                           |
 
 #### Docker
 
 ```bash
-docker build -t etha3a-api .
-docker run -p 3000:3000 --env-file .env etha3a-api
+docker build -t bonyan-api .
+docker run -p 3000:3000 --env-file .env bonyan-api
 ```
 
 ### Testing
@@ -236,7 +243,7 @@ DOCKERFILE                  # multi-stage production image
 
 ### Contributing
 
-We welcome contributions! Direct pushes to `main` are blocked — every change must go through a Pull Request, and CI must pass (ESLint + `tsc` + Vitest with coverage upload).
+We welcome contributions! Direct pushes to `main` are blocked — every change must go through a Pull Request, and CI must pass (ESLint + `tsc` + Vitest with coverage upload). See [CONTRIBUTING.md](./CONTRIBUTING.md), [SECURITY.md](./SECURITY.md), [SUPPORT.md](./SUPPORT.md), [SOURCES.md](./SOURCES.md), and [ROADMAP.md](./ROADMAP.md).
 
 1. **Fork** the repository and clone your fork.
 2. **Create** a feature branch: `git checkout -b feature/your-feature`.
@@ -264,7 +271,7 @@ This software is released under the [MIT License](./LICENSE).
 
 ### وصف المشروع
 
-**Etha3a-API** هي واجهة برمجة تطبيقات إسلامية متكاملة وعالية الأداء، مبنية على **Node.js** و **Fastify** و **TypeScript**. توفّر واجهة بيانات موحّدة وآمنة النوع لكل ما يحتاجه التطبيق الإسلامي الحديث من محتوى رقمي: نص القرآن الكريم كاملاً، التلاوات الصوتية، التفسير، الأذكار، الأحاديث، مواقيت الصلاة، التحويل بين التاريخ الهجري والميلادي، واتجاه القبلة.
+**Bonyan-API** هي واجهة برمجة تطبيقات إسلامية متكاملة وعالية الأداء، مبنية على **Node.js** و **Fastify** و **TypeScript**. توفّر واجهة بيانات موحّدة وآمنة النوع لكل ما يحتاجه التطبيق الإسلامي الحديث من محتوى رقمي: نص القرآن الكريم كاملاً، التلاوات الصوتية، التفسير، الأذكار، الأحاديث، مواقيت الصلاة، التحويل بين التاريخ الهجري والميلادي، واتجاه القبلة.
 
 كل وحدة في المشروع مبنية حول فكرة جوهرية واحدة: **المرونة من خلال البدائل (Fallback)**. عند تعطّل المصدر الأساسي، يتنقّل النظام تلقائياً إلى المصدر التالي ضمن قائمة موثّقة من المزوّدين، ويُرجع للعميل نفس الشكل الموحّد دائماً. كما تُخزَّن النتائج المتكررة في الذاكرة لتقليل زمن الاستجابة وتخفيف الضغط على المصادر الخارجية.
 
@@ -395,8 +402,8 @@ This software is released under the [MIT License](./LICENSE).
 #### التشغيل المحلي
 
 ```bash
-git clone https://github.com/BonyanOSS/Etha3a-API.git
-cd Etha3a-API
+git clone https://github.com/BonyanOSS/Bonyan-API.git
+cd Bonyan-API
 pnpm install
 cp .env.example .env
 pnpm dev
@@ -405,6 +412,7 @@ pnpm dev
 #### الإنتاج
 
 ```bash
+pnpm lint:check
 pnpm lint
 pnpm build
 pnpm start
@@ -419,12 +427,16 @@ pnpm start
 | `NODE_ENV`          | `production`      | بيئة التشغيل               |
 | `RATE_LIMIT_MAX`    | `120`             | الحد الأقصى للطلبات لكل IP |
 | `RATE_LIMIT_WINDOW` | `1 minute`        | نافذة تحديد المعدّل        |
+| `CORS_ORIGIN`       | `*`               | النطاقات المسموح لها       |
+| `TRUST_PROXY`       | `false`           | الثقة بترويسات البروكسي    |
+| `LOG_LEVEL`         | `info`            | مستوى سجلات Fastify        |
+| `CACHE_MAX_ENTRIES` | `1000`            | حد عناصر الكاش الداخلي     |
 
 #### Docker
 
 ```bash
-docker build -t etha3a-api .
-docker run -p 3000:3000 --env-file .env etha3a-api
+docker build -t bonyan-api .
+docker run -p 3000:3000 --env-file .env bonyan-api
 ```
 
 ### الاختبارات
